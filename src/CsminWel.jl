@@ -131,7 +131,7 @@ function Optim.optimize(f::Function, g!::Function, initial_x::Array, method::Csm
   function gradwrap(g!, x)
       stor = Array{Float64}(length(x))
       g!(x, stor)
-      bad_grads = abs(stor) .>= 1e15
+      bad_grads = abs.(stor) .>= 1e15
       stor[bad_grads] = 0.0
       return stor, any(bad_grads)
   end
@@ -721,7 +721,7 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{true}}, ::Type{Val{fal
     function gradient(x)
       gr = similar(x)
       grad_f(gr, x)
-      bad_grads = abs(gr) .>= 1e15
+      bad_grads = abs.(gr) .>= 1e15
       gr[bad_grads] = 0.0
       return gr, any(bad_grads)
     end
@@ -731,7 +731,7 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{tr
   function gradient(x)
     gr = similar(x)
     ForwardDiff.gradient!(gr, fcn, x)
-    bad_grads = abs(gr) .>= 1e15
+    bad_grads = abs.(gr) .>= 1e15
     gr[bad_grads] = 0.0
     return gr, any(bad_grads)
   end
@@ -740,7 +740,7 @@ end
 function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{false}})
   function gradient(x)
     gr = Calculus.gradient(fcn, x)
-    bad_grads = abs(gr) .>= 1e15
+    bad_grads = abs.(gr) .>= 1e15
     gr[bad_grads] = 0.0
     return gr, any(bad_grads)
   end

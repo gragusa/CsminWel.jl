@@ -38,7 +38,7 @@ res2 = optimize(loglik, fg!, zeros(5), Csminwel())
 res3 = optimize(loglik, zeros(5), Csminwel())
 
 ## With forward AD derivative
-res4 = optimize(loglik, zeros(5), Csminwel(), options = OptimizationOptions(autodiff=true))
+res4 = optimize(loglik, zeros(5), Csminwel(), OptimizationOptions(autodiff=true))
 
 ## inverse Hessian
 res2.invH

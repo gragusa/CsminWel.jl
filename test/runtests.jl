@@ -13,7 +13,7 @@ end
 
 res1 = optimize(f, g!, [.1, .1], Csminwel())
 res2 = optimize(f, [.1, .1], Csminwel())
-res3 = optimize(f, [.1, .1], Csminwel(), options = OptimizationOptions(autodiff=true))
+res3 = optimize(f, [.1, .1], Csminwel(), OptimizationOptions(autodiff=true))
 
 
 @test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res1) 1e-09
@@ -47,8 +47,8 @@ end
 
 res1 = optimize(loglik, fg!, zeros(5), BFGS())
 res2 = optimize(loglik, fg!, zeros(5), Csminwel())
-res3 = optimize(loglik, zeros(5), Csminwel(), options = OptimizationOptions(autodiff=true))
-res4 = optimize(loglik, zeros(5), Csminwel(), options = OptimizationOptions(autodiff=false))
+res3 = optimize(loglik, zeros(5), Csminwel(), OptimizationOptions(autodiff=true))
+res4 = optimize(loglik, zeros(5), Csminwel(), OptimizationOptions(autodiff=false))
 
 @test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res1) 1e-06
 @test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res3) 1e-06

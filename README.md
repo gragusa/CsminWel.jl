@@ -1,6 +1,6 @@
 # CsminWel.jl
 
-[![Build Status](https://travis-ci.org/gragusa/CsminWel.jl.svg?branch=master)](https://travis-ci.org/gragusa/CsminWel.jl) [![Coverage Status](https://coveralls.io/repos/gragusa/CsminWel.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/gragusa/Csminwel.jl?branch=master) [![codecov.io](http://codecov.io/github/gragusa/CsminWel.jl/coverage.svg?branch=master)](http://codecov.io/github/gragusa/CsminWel.jl?branch=master)
+[![Build Status](https://travis-ci.org/gragusa/CsminWel.jl.svg?branch=master)](https://travis-ci.org/gragusa/CsminWel.jl) [![Coverage Status](https://coveralls.io/repos/gragusa/CsminWel.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/gragusa/CsminWel.jl?branch=master) [![codecov.io](http://codecov.io/github/gragusa/CsminWel.jl/coverage.svg?branch=master)](http://codecov.io/github/gragusa/CsminWel.jl?branch=master)
 
 Interface to Chris Sims' `csminwel` optimization code. The code borrows from [DSGE.jl](https://github.com/FRBNY-DSGE/DSGE.jl), but it is adapted to be compatibles with the [Optim.jl](https://github.com/JuliaOpt/Optim.jl)'s API. When the derivative of the minimand is not supply either Finite Difference of Forward Automatic Differentiation derivatives are automatically supplied to the underlying code.
 

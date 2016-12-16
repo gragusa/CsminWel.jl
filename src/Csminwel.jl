@@ -687,7 +687,6 @@ function bfgsi(H0, dg, dx; verbose::Symbol = :none)
     return H
 end
 
-
 function assess_convergence(x::Array,
                             x_previous::Array,
                             f_x::Real,
@@ -717,6 +716,37 @@ function assess_convergence(x::Array,
 
     return x_converged, f_converged, gr_converged, converged
 end
+
+## CSMINWEL
+function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{true}}, ::Type{Val{false}})
+    function gradient(x)
+      gr = similar(x)
+      grad_f(gr, x)
+      bad_grads = abs(gr) .>= 1e15
+      gr[bad_grads] = 0.0
+      return gr, any(bad_grads)
+    end
+end
+
+function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{true}})
+  function gradient(x)
+    gr = similar(x)
+    ForwardDiff.gradient!(gr, fcn, x)
+    bad_grads = abs(gr) .>= 1e15
+    gr[bad_grads] = 0.0
+    return gr, any(bad_grads)
+  end
+end
+
+function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{false}})
+  function gradient(x)
+    gr = Calculus.gradient(fcn, x)
+    bad_grads = abs(gr) .>= 1e15
+    gr[bad_grads] = 0.0
+    return gr, any(bad_grads)
+  end
+end
+
 
 # function Base.show(io::IO, t::OptimizationState)
 #     @printf io "%6d   %14.10e   %14.10e\n" t.iteration t.value t.gradnorm

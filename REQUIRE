@@ -1,5 +1,5 @@
 julia 0.5
 ForwardDiff 0.3
 Calculus 0.1
-Optim 0.7
+Optim 0.7.4
 Reexport 0.0.3

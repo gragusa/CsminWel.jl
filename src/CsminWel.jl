@@ -108,7 +108,7 @@ macro csminwelltrace()
 end
 
 function Optim.optimize(f::Function, initial_x::Array, method::Csminwel,
-                        options::OptimizationOptions = OptimizationOptions();
+                        options::Optim.Options = Optim.Options();
                         H0::Matrix           = 1e-5.*eye(length(initial_x)),
                         rng::AbstractRNG     = MersenneTwister())
   opts = Array{Any}(0)
@@ -120,7 +120,7 @@ end
 
 
 function Optim.optimize(f::Function, g!::Function, initial_x::Array, method::Csminwel,
-                        options::OptimizationOptions = OptimizationOptions();
+                        options::Optim.Options = Optim.Options();
                         H0::Matrix           =1e-5.*eye(length(initial_x)),
                         rng::AbstractRNG     = MersenneTwister())
     opts = Array{Any}(0)

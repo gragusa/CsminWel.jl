@@ -17,7 +17,7 @@ This code is based on a routine originally copyright Chris Sims.
 See http://sims.princeton.edu/yftp/optimize/
 =#
 
-immutable Csminwel <: Optim.Optimizer end
+struct Csminwel <: Optim.Optimizer end
 
 ## Changed respoct to default to store Hessian matrix
 mutable struct MultivariateOptimizationResultsCs{O<:Optimizer,T,N} <: OptimizationResults
@@ -472,7 +472,7 @@ function csminwel(fcn::Function, x0::Vector{T}; kwargs...) where T <: Real
             autodiff = fn[2]
         end
     end
-    grad{T<:Number}(x::Array{T}) = csminwell_grad(fcn, x, Val{autodiff})
+    grad(x::Array{T}) where {T<:Number} = csminwell_grad(fcn, x, Val{autodiff})
     csminwel(fcn, grad, x0; kwargs...)
 end
 

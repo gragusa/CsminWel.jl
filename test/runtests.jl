@@ -1,26 +1,35 @@
 using CsminWel
 using Base.Test
 
-# write your own tests here
+
 f(x) = sum(x.^2)
 function grad(x)
     2*x, false
 end
 
-function g!(x, stor)
+function g!(stor, x)
     stor[:] = 2*x
 end
 
-res1 = optimize(f, g!, [.1, .1], Csminwel())
-res2 = optimize(f, [.1, .1], Csminwel())
-res3 = optimize(f, [.1, .1], Csminwel(), Optim.Options(autodiff=true))
+
+res0 = CsminWel.csminwel(f, grad, [0.1,0.1])
+res1 = CsminWel.csminwel(f, [0.1,0.1])
+
+res2 = CsminWel.csminwel(f, grad, [0.1,0.1])
+res3 = CsminWel.csminwel(f, [0.1,0.1], H = eye(2))
 
 
-@test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res1) 1e-09
-@test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res3) 1e-09
+res4 = optimize(f, g!, [.1, .1], Csminwel())
+res5 = optimize(f, [.1, .1], Csminwel())   ## Default to finite difference
+res6 = optimize(OnceDifferentiable(f, [.1, .1], autodiff = :forward), Csminwel())
 
-@test_approx_eq_eps Optim.minimizer(res2)  Optim.minimizer(res1) 1e-09
-@test_approx_eq_eps Optim.minimizer(res2)  Optim.minimizer(res3) 1e-09
+
+@test Optim.minimum(res0) ≈ Optim.minimum(res1) atol=1.0e-9
+@test Optim.minimum(res1) ≈ Optim.minimum(res2) atol=1.0e-9
+@test Optim.minimum(res2) ≈ Optim.minimum(res3) atol=1.0e-9
+@test Optim.minimum(res3) ≈ Optim.minimum(res4) atol=1.0e-9
+@test Optim.minimum(res4) ≈ Optim.minimum(res5) atol=1.0e-9
+@test Optim.minimum(res6) ≈ Optim.minimum(res6) atol=1.0e-9
 
 #=
 Maximizing loglikelihood logistic models
@@ -41,19 +50,24 @@ function dloglik(beta)
     -x'*(y.-px)
 end
 
-function fg!(beta, stor)
-    stor[:] = dloglik(beta)
+function g!(stor, beta)
+    copy!(stor, dloglik(beta))
 end
 
-res1 = optimize(loglik, fg!, zeros(5), BFGS())
-res2 = optimize(loglik, fg!, zeros(5), Csminwel())
-res3 = optimize(loglik, zeros(5), Csminwel(), Optim.Options(autodiff=true))
-res4 = optimize(loglik, zeros(5), Csminwel(), Optim.Options(autodiff=false))
+res1 = optimize(loglik, g!, zeros(5), BFGS())
+res2 = optimize(loglik, g!, zeros(5), Csminwel())
+res3 = optimize(loglik, zeros(5), Csminwel())
+res4 = optimize(Optim.OnceDifferentiable(loglik, zeros(5), autodiff = :forward), Csminwel())
+res5 = optimize(Optim.OnceDifferentiable(loglik, zeros(5), autodiff = :finite), Csminwel())
 
-@test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res1) 1e-06
-@test_approx_eq_eps Optim.minimum(res2)  Optim.minimum(res3) 1e-06
-@test_approx_eq_eps Optim.minimum(res4)  Optim.minimum(res3) 1e-06
 
-@test_approx_eq_eps Optim.minimizer(res2)  Optim.minimizer(res1) 1e-06
-@test_approx_eq_eps Optim.minimizer(res2)  Optim.minimizer(res3) 1e-06
-@test_approx_eq_eps Optim.minimizer(res3)  Optim.minimizer(res4) 1e-06
+@test Optim.minimum(res1) ≈ Optim.minimum(res2) atol=1.0e-9
+@test Optim.minimum(res2) ≈ Optim.minimum(res3) atol=1.0e-9
+@test Optim.minimum(res3) ≈ Optim.minimum(res4) atol=1.0e-9
+@test Optim.minimum(res4) ≈ Optim.minimum(res5) atol=1.0e-9
+
+
+res = optimize(loglik, g!, zeros(5), Csminwel(), Optim.Options(extended_trace = true, show_trace = true, store_trace = true))
+
+
+@test isa(res.trace, Array{Optim.OptimizationState{CsminWel.Csminwel},1})

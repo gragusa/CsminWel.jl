@@ -5,22 +5,26 @@ using ForwardDiff
 @reexport using Optim
 using Calculus
 
-import Optim: Optimizer, 
-              OptimizationResults, 
-              MultivariateOptimizationResults,              
-              optimize, initial_state, minimizer, 
+import Base.minimum
+import Optim: AbstractOptimizer,
+              OptimizationResults,
+              MultivariateOptimizationResults,
+              optimize, initial_state, minimizer,
               minimum, iterations, converged, x_converged,
-              f_converged, f_tol, g_tol, g_converged, iteration_limit_reached, 
+              f_converged, f_tol, g_tol, g_converged, iteration_limit_reached,
               f_calls, method
+
 #=
 This code is based on a routine originally copyright Chris Sims.
 See http://sims.princeton.edu/yftp/optimize/
+It was transcripted in julia copyright Giuseppe Ragusa
+Copyright (c) 2015, Federal Reserve Bank of New York Copyright (c) 2015, Chris Sims Copyright (c) 2015, Giuseppe Ragusa
 =#
 
-immutable Csminwel <: Optim.Optimizer end
+immutable Csminwel <: Optim.AbstractOptimizer end
 
 ## Changed respoct to default to store Hessian matrix
-mutable struct MultivariateOptimizationResultsCs{O<:Optimizer,T,N} <: OptimizationResults
+mutable struct MultivariateOptimizationResultsCs{O<:AbstractOptimizer,T,N} <: OptimizationResults
     method::String
     initial_x::Array{T,N}
     minimizer::Array{T,N}
@@ -33,7 +37,7 @@ mutable struct MultivariateOptimizationResultsCs{O<:Optimizer,T,N} <: Optimizati
     f_tol::Float64
     g_converged::Bool
     g_tol::Float64
-    trace::OptimizationTrace{O}
+    trace::OptimizationTrace{T,O}
     f_calls::Int
     g_calls::Int
     h_calls::Int
@@ -87,41 +91,42 @@ const rc_messages = Dict(0 => "Standard Iteration",
 6 => "smallest step still improving too slow, reversed gradient",
 7 => "warning: possible inaccuracy in H matrix")
 
-function Optim.optimize(f::Function, 
-    initial_x::Array, 
-    method::Csminwel, 
+function Optim.optimize(f::Function,
+    initial_x::Array,
+    method::Csminwel,
     options::Optim.Options = Optim.Options();
     H0::Matrix             = 1e-5.*eye(length(initial_x)),
     rng::AbstractRNG       = MersenneTwister(0))
-    
+
     opts = extract_options(options)
-    d = Optim.OnceDifferentiable(f, initial_x; autodiff = :finite)  
+    d = Optim.OnceDifferentiable(f, initial_x; autodiff = :finite)
     function gradwrap(g!, x)
         stor = Array{Float64}(length(x))
         g!(stor, x)
         bad_grads = abs.(stor) .>= 1e15
         stor[bad_grads] = 0.0
         return stor, any(bad_grads)
-    end                      
-    csminwel(f, x -> gradwrap(d.g!,x), initial_x; H0 = H0, rng = rng, opts...)
+    end
+    csminwel(f, x -> gradwrap(d.df,x), initial_x; H0 = H0, rng = rng, opts...)
 end
 
 function Optim.optimize(d::Optim.OnceDifferentiable,
-    method::Csminwel, 
+    initial_x::Array,
+    method::Csminwel,
     options::Optim.Options = Optim.Options();
-    H0::Matrix             = 1e-5.*eye(length(d.last_x_f)),
+    H0::Matrix             = 1e-5.*eye(length(d.x_f)),
     rng::AbstractRNG       = MersenneTwister(0))
-    
+
     opts = extract_options(options)
-    
+
     function gradwrap(g!, x)
         stor = Array{Float64}(length(x))
         g!(stor, x)
         bad_grads = abs.(stor) .>= 1e15
         stor[bad_grads] = 0.0
         return stor, any(bad_grads)
-    end                      
-    csminwel(d.f, x -> gradwrap(d.g!,x), d.last_x_f; H0 = H0, rng = rng, opts...)
+    end
+    csminwel(d.f, x -> gradwrap(d.df,x), initial_x; H0 = H0, rng = rng, opts...)
 end
 
 function extract_options(opt::Optim.Options)
@@ -133,16 +138,16 @@ function extract_options(opt::Optim.Options)
 end
 
 
-function Optim.optimize(f::Function, 
-    g!::Function, 
-    initial_x::Array{T,1}, 
+function Optim.optimize(f::Function,
+    g!::Function,
+    initial_x::Array{T,1},
     method::Csminwel,
     options::Optim.Options = Optim.Options();
     H0::Matrix             = 1e-5.*eye(length(initial_x)),
     rng::AbstractRNG       = MersenneTwister(0)) where T <: Real
-    
+
     opts = extract_options(options)
-    
+
     function gradwrap(g!, x)
         stor = Array{Float64}(length(x))
         g!(stor, x)
@@ -155,58 +160,58 @@ end
 
 function csminwel(fcn::Function,
     grad::Function,
-    x0::Vector;                  
-    H0::Matrix           = 1e-5.*eye(length(x0)),                  
+    x0::Vector;
+    H0::Matrix           = 1e-5.*eye(length(x0)),
     rng::AbstractRNG     = MersenneTwister(0),
-    verbose::Symbol      = :none,
+    verbose::Symbol      = :high,
     x_tol::Real          = 1e-32,  # default from Optim.jl
     f_tol::Float64       = 1e-14,  # Default from csminwel
     g_tol::Real          = 1e-8,   # default from Optim.jl
     iterations::Int      = 1000,
     store_trace::Bool    = false,
     show_trace::Bool     = false,
-    extended_trace::Bool = false,    
+    extended_trace::Bool = false,
     kwargs...)
-    
-    
+
+
     xtol, ftol, grtol  = x_tol, f_tol, g_tol
-    
+
     if show_trace
         @printf "Iter     Function value   Gradient norm \n"
     end
-    
+
     # unpack dimensions
     nx = size(x0, 1)
-    
+
     # Count function and gradient calls
     f_calls, g_calls, h_calls = 0, 0, 0
-    
+
     # Maintain current state in x and previous state in x_previous
     x, x_previous = copy(x0), copy(x0)
-    
+
     # start with Initial Hessian
     H = H0
-    
+
     # start rc parameter at 0
     rc = 0
-    
+
     f_x = fcn(x0)
     f_calls += 1
-    
+
     if f_x > 1e50
         throw(ArgumentError("Bad initial guess. Try again"))
     end
-    
+
     gr, badg = grad(x0)
     g_calls += 1
-    
+
     # Count iterations
     iteration = 0
-    
+
     # Maintain a trace
-    tr = OptimizationTrace{Csminwel}()
+    tr = OptimizationTrace{typeof(f_x), Csminwel}()
     tracing = show_trace || store_trace || extended_trace
-    
+
     if tracing
         dt = Dict()
         if extended_trace
@@ -219,27 +224,27 @@ function csminwel(fcn::Function,
         grnorm = norm(gr, Inf)
         Optim.update!(tr, iteration, f_x, grnorm, dt, store_trace, show_trace)
     end
-    
+
     # set objects to their starting values
     retcode3 = 101
-    
+
     # set up return variables so they are available outside while loop
     fh = copy(f_x)
     xh = copy(x0)
     gh = copy(x0)
     retcodeh = 1000
-    
+
     # Assess multiple types of convergence
     x_converged, f_converged, gr_converged = false, false, false
-    
+
     # Iterate until convergence or exhaustion
     converged = false
     while !converged && iteration < iterations
         iteration += 1
-        
+
         f1, x1, fc, retcode1 = csminit(fcn, x, f_x, gr, badg, H; verbose=verbose)
         f_calls += fc
-        
+
         if retcode1 != 1
             if retcode1 == 2 || retcode1 == 4
                 wall1, badg1 = true, true
@@ -248,20 +253,20 @@ function csminwel(fcn::Function,
                 g_calls += 1
                 wall1 = badg1
             end
-            
+
             # Bad gradient or back and forth on step length.  Possibly at cliff edge. Try
             # perturbing search direction if problem not 1D
             if wall1 && (length(H) > 1)
-                
+
                 Hcliff = H + diagm(diag(H).*rand(rng, nx))
-                
+
                 if VERBOSITY[verbose] >= VERBOSITY[:low]
                     @printf "Cliff.  Perturbing search direction.\n"
                 end
-                
+
                 f2, x2, fc, retcode2 = csminit(fcn, x, f_x, gr, badg, Hcliff; verbose=verbose)
                 f_calls += fc
-                
+
                 if f2 < f_x
                     if retcode2==2 || retcode2==4
                         wall2 = true; badg2 = true
@@ -271,12 +276,12 @@ function csminwel(fcn::Function,
                         wall2 = badg2
                         badg2
                     end
-                    
+
                     if wall2
                         if VERBOSITY[verbose] >= VERBOSITY[:low]
                             @printf "Cliff again.  Try traversing\n"
                         end
-                        
+
                         if norm(x2-x1) < 1e-13
                             f3 = f_x
                             x3 = x
@@ -290,7 +295,7 @@ function csminwel(fcn::Function,
                             f3, x3, fc, retcode3 = csminit(fcn, x, f_x, gcliff,
                             false, eye(nx); verbose=verbose)
                             f_calls += fc
-                            
+
                             if retcode3==2 || retcode3==4
                                 wall3 = true
                                 badg3 = true
@@ -322,7 +327,7 @@ function csminwel(fcn::Function,
             f1, f2, f3 = f_x, f_x, f_x
             retcode2, retcode3 = retcode1, retcode1
         end
-        
+
         # how to pick gh and xh
         if f3 < f_x - ftol && badg3==0
             ih = 3
@@ -347,7 +352,7 @@ function csminwel(fcn::Function,
             retcodeh = retcode1
         else
             fh, ih = findmin([f1 , f2 , f3])
-            
+
             if ih == 1
                 xh = x1
                 retcodeh = retcode1
@@ -358,49 +363,49 @@ function csminwel(fcn::Function,
                 xh = x3
                 retcodeh = retcode3
             end
-            
+
             if isdefined(:gh)
                 nogh = isempty(gh)
             else
                 nogh = true
             end
-            
+
             if nogh
                 gh, badgh = grad(xh)
                 g_calls += 1
             end
-            
+
             badgh = true
         end
-        
+
         stuck = (abs(fh-f_x) < ftol)
         if !badg && !badgh && !stuck
             H = bfgsi(H , gh-gr , xh-x; verbose=verbose)
         end
-        
+
         if VERBOSITY[verbose] >= VERBOSITY[:high]
             @printf "Improvement on iteration %d = %18.9f\n" iteration fh-f_x
         end
-        
+
         if stuck
             if VERBOSITY[verbose] >= VERBOSITY[:low]
                 @printf "improvement < ftol -- terminating\n"
             end
         end
-        
+
         # record# retcodeh of previous x
         copy!(x_previous, x)
-        
+
         # update before next iteration
         f_x_previous, f_x = f_x, fh
         x = xh
         gr = gh
         badg = badgh
-        
+
         # Check convergence
-        x_converged, f_converged, gr_converged, converged = 
+        x_converged, f_converged, gr_converged, converged =
             assess_convergence(x, x_previous, f_x, f_x_previous, gr, xtol, ftol, grtol)
-        
+
         if tracing
             dt = Dict()
             if extended_trace
@@ -412,10 +417,10 @@ function csminwel(fcn::Function,
             end
             grnorm = norm(gr, Inf)
             Optim.update!(tr, iteration, f_x, grnorm, dt, store_trace, show_trace)
-        end        
-        
+        end
+
     end
-    
+
     return MultivariateOptimizationResultsCs("Csminwel", x0, x, convert(Float64, f_x),
     iteration, iteration==iterations, x_converged, xtol, f_converged, ftol,
     gr_converged, grtol, tr, f_calls, g_calls, h_calls, H)   # also return H
@@ -432,7 +437,7 @@ using the true derivative.
 # """
 # ```
 # csminwel(fcn::Function, grad::Function, x0::Vector, H0::Matrix=1e-5.*eye(length(x0)), args...;
-# xtol::Real=1e-32, ftol::Float64=1e-14, grtol::Real=1e-8, iterations::Int=1000,
+# xtol::Real=1e-32, ftol::Float64=1e-14, grtol::Real=1e-5, iterations::Int=1000,
 # store_trace::Bool = false, show_trace::Bool = false, extended_trace::Bool = false,
 # verbose::Symbol = :none, rng::AbstractRNG = MersenneTwister(), kwargs...)
 # ```
@@ -493,10 +498,10 @@ end
 
 
 
-function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=:none, kwargs...) where T <: Real
+function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=:high, kwargs...) where T <: Real
     x0 = float(x0)
     angle = .005
-    
+
     #(0<THETA<.5) THETA near .5 makes long line searches, possibly fewer iterations.
     theta = .3
     fchange = 1000
@@ -509,7 +514,7 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
     fhat = f0
     gr = g0
     gnorm = norm(gr)
-    
+
     if gnorm < 1e-12 && !badg
         # gradient convergence
         retcode = 1
@@ -519,33 +524,33 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
         # derivative.  We're satisfied just to get some improvement in f.
         dx = vec(-H0*gr)
         dxnorm = norm(dx)
-        
+
         if dxnorm > 1e12
-            
+
             if VERBOSITY[verbose] >= VERBOSITY[:low]
                 @printf "Near singular H problem.\n"
             end
-            
+
             dx = dx * fchange / dxnorm
         end
-        
+
         dfhat = dot(dx, g0)
-        
+
         if !badg
             # test for alignment of dx with gradient and fix if necessary
             a = -dfhat / (gnorm*dxnorm)
-            
+
             if a < angle
                 dx -= (angle*dxnorm/gnorm + dfhat/(gnorm*gnorm)) * gr
                 dx *= dxnorm/norm(dx)
                 dfhat = dot(dx, gr)
-                
+
                 if VERBOSITY[verbose] >= VERBOSITY[:low]
                     @printf "Correct for low angle %f\n" a
                 end
             end
         end
-        
+
         if VERBOSITY[verbose] >= VERBOSITY[:high]
             @printf "Predicted Improvement: %18.9f\n" (-dfhat/2)
         end
@@ -559,34 +564,32 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
         lambda_peak = 0.0
         f_peak = f0
         lambda_hat = 0.0
-        
+
         while !done
             if size(x0, 2) > 1
                 dxtest = x0 + dx' * lambda
             else
                 dxtest = x0 + dx * lambda
             end
-            
+
             f = fcn(dxtest, args...; kwargs...)
-            
+
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @printf "lambda = %10.5f; f = %20.7f\n" lambda f
             end
-            
+
             if f < fhat
                 fhat = f
                 xhat = dxtest
                 lambdahat = lambda
             end
-            
+
             f_calls += 1
-            shrink_signal = (!badg &&
-            (f0-f < maximum([-theta*dfhat*lambda 0]))) ||
-            (badg && (f0-f) < 0)
-            
+            shrink_signal = (!badg & (f0-f < maximum([-theta*dfhat*lambda 0]))) || (badg & ((f0-f) < 0))
+
             grow_signal = !badg && (lambda > 0)  &&
             (f0-f > -(1-theta)*dfhat*lambda)
-            
+
             if shrink_signal && ((lambda > lambda_peak) || lambda < 0 )
                 if (lambda > 0) && ((!shrink) || (lambda/fact <= lambda_peak))
                     shrink = true
@@ -594,22 +597,22 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
                     while lambda / fact <= lambda_peak
                         fact = fact^.6
                     end
-                    
+
                     if abs(fact - 1.0) < mindfac
                         if abs(lambda) < 4
                             retcode = 2
                         else
                             retcode = 7
                         end
-                        
+
                         done = true
                     end
                 end
-                
+
                 if lambda < lambda_max && lambda > lambda_peak
                     lambda_max = lambda
                 end
-                
+
                 lambda /= fact
                 if abs(lambda) < minlamb
                     if (lambda > 0) && (f0 <= fhat)
@@ -623,8 +626,8 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
                         done = true
                     end
                 end
-                
-                
+
+
             elseif (grow_signal && lambda > 0) || (shrink_signal &&
                 ((lambda <= lambda_peak) && (lambda > 0)))
                 if shrink
@@ -639,7 +642,7 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
                         done = true
                     end
                 end
-                
+
                 if f < f_peak && lambda > 0
                     f_peak = f
                     lambda_peak = lambda
@@ -647,7 +650,7 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
                         lambda_max = lambda_peak * fact^2
                     end
                 end
-                
+
                 lambda *= fact
                 if abs(lambda) > 1e20
                     retcode = 5
@@ -663,11 +666,11 @@ function csminit(fcn, x0::Vector{T}, f0, g0, badg, H0, args...; verbose::Symbol=
             end
         end
     end
-    
+
     if VERBOSITY[verbose] >= VERBOSITY[:high]
         @printf "Norm of dx %10.5f\n" dxnorm
     end
-    
+
     return fhat, xhat, f_calls, retcode
 end
 
@@ -675,24 +678,23 @@ end
 ```
 bfgsi(H0, dg, dx)
 ```
-
 ### Arguments
 - `H0`: hessian matrix
 - `dg`: previous change in gradient
 - `dx`: previous change in x
 """
-function bfgsi(H0, dg, dx; verbose::Symbol = :none)
+function bfgsi(H0, dg, dx; verbose::Symbol = :high)
     if size(dg, 2) > 1
         dg = dg'
     end
-    
+
     if size(dx, 2) > 1
         dx = dx'
     end
-    
+
     Hdg = H0*dg
     dgdx = dot(dx, dg)
-    
+
     H = H0
     if abs(dgdx) > 1e-12
         H += (dgdx.+(dg'*Hdg)).*(dx*dx')/(dgdx^2) - (Hdg*dx'.+dx*Hdg')/dgdx
@@ -707,7 +709,7 @@ function bfgsi(H0, dg, dx; verbose::Symbol = :none)
             @printf "|H*dg| = %f\n" (norm(Hdg))
         end
     end
-    
+
     return H
 end
 
@@ -720,24 +722,24 @@ function assess_convergence(x::Array,
     ftol::Real,
     grtol::Real)
     x_converged, f_converged, gr_converged = false, false, false
-    
+
     if Optim.maxdiff(x, x_previous) < xtol
         x_converged = true
     end
-    
+
     # Relative Tolerance
     # if abs(f_x - f_x_previous) / (abs(f_x) + ftol) < ftol || nextfloat(f_x) >= f_x_previous
     # Absolute Tolerance
     if abs(f_x - f_x_previous) < ftol
         f_converged = true
     end
-    
+
     if norm(vec(gr), Inf) < grtol
         gr_converged = true
     end
-    
+
     converged = x_converged || f_converged || gr_converged
-    
+
     return x_converged, f_converged, gr_converged, converged
 end
 
@@ -771,15 +773,6 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{fa
     end
 end
 
-
-# function Base.show(io::IO, t::OptimizationState)
-#     @printf io "%6d   %14.10e   %14.10e\n" t.iteration t.value t.gradnorm
-#     if !isempty(t.metadata)
-#         for (key, value) in t.metadata
-#             @printf io " * %s: %s\n" key value
-#         end
-#     end
-#     return
-# end
 export Csminwel
-end # module
+
+end

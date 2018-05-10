@@ -1,5 +1,7 @@
 Copyright (c) 2015, Federal Reserve Bank of New York
+
 Copyright (c) 2015, Chris Sims
+
 Copyright (c) 2015, Giuseppe Ragusa
 
 > Redistribution and use in source and binary forms, with or without modification,

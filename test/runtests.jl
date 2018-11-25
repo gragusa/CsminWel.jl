@@ -1,4 +1,4 @@
-using CsminWel, Test, Random
+using CsminWel, Test, Random, LinearAlgebra
 
 f(x) = sum(x.^2)
 function grad(x)

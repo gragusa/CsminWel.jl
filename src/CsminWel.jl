@@ -4,8 +4,11 @@ using Reexport
 using ForwardDiff
 @reexport using Optim
 using Calculus
+using LinearAlgebra
 
 import Base.minimum
+import Random: AbstractRNG, MersenneTwister
+import Printf.@printf
 import Optim: AbstractOptimizer,
               OptimizationResults,
               MultivariateOptimizationResults,
@@ -21,7 +24,7 @@ It was transcripted in julia copyright Giuseppe Ragusa
 Copyright (c) 2015, Federal Reserve Bank of New York Copyright (c) 2015, Chris Sims Copyright (c) 2015, Giuseppe Ragusa
 =#
 
-immutable Csminwel <: Optim.AbstractOptimizer end
+struct Csminwel <: Optim.AbstractOptimizer end
 
 ## Changed respoct to default to store Hessian matrix
 mutable struct MultivariateOptimizationResultsCs{O<:AbstractOptimizer,T,N} <: OptimizationResults
@@ -95,16 +98,16 @@ function Optim.optimize(f::Function,
     initial_x::Array,
     method::Csminwel,
     options::Optim.Options = Optim.Options();
-    H0::Matrix             = 1e-5.*eye(length(initial_x)),
+    H0::Matrix             = 1e-5 .* Matrix{eltype(initial_x)}(I, length(initial_x), length(initial_x)),
     rng::AbstractRNG       = MersenneTwister(0))
 
     opts = extract_options(options)
     d = Optim.OnceDifferentiable(f, initial_x; autodiff = :finite)
     function gradwrap(g!, x)
-        stor = Array{Float64}(length(x))
+        stor = Array{Float64}(undef, length(x))
         g!(stor, x)
         bad_grads = abs.(stor) .>= 1e15
-        stor[bad_grads] = 0.0
+        stor[bad_grads] .= 0.0
         return stor, any(bad_grads)
     end
     csminwel(f, x -> gradwrap(d.df,x), initial_x; H0 = H0, rng = rng, opts...)
@@ -114,24 +117,24 @@ function Optim.optimize(d::Optim.OnceDifferentiable,
     initial_x::Array,
     method::Csminwel,
     options::Optim.Options = Optim.Options();
-    H0::Matrix             = 1e-5.*eye(length(d.x_f)),
+    H0::Matrix             = 1e-5 .* Matrix{eltype(d.x_f)}(I, length(d.x_f), length(d.x_f)),
     rng::AbstractRNG       = MersenneTwister(0))
 
     opts = extract_options(options)
 
     function gradwrap(g!, x)
-        stor = Array{Float64}(length(x))
+        stor = Array{Float64}(undef, length(x))
         g!(stor, x)
         bad_grads = abs.(stor) .>= 1e15
-        stor[bad_grads] = 0.0
+        stor[bad_grads] .= 0.0
         return stor, any(bad_grads)
     end
     csminwel(d.f, x -> gradwrap(d.df,x), initial_x; H0 = H0, rng = rng, opts...)
 end
 
 function extract_options(opt::Optim.Options)
-    opts = Array{Any}(0)
-    for name in fieldnames(opt)
+    opts = Array{Any}(undef, 0)
+    for name in fieldnames(typeof(opt))
         push!(opts, (name, getfield(opt, name)))
     end
     opts
@@ -143,16 +146,16 @@ function Optim.optimize(f::Function,
     initial_x::Array{T,1},
     method::Csminwel,
     options::Optim.Options = Optim.Options();
-    H0::Matrix             = 1e-5.*eye(length(initial_x)),
+    H0::Matrix             = 1e-5.* Matrix{eltype(initial_x)}(I, length(initial_x), length(initial_x)),
     rng::AbstractRNG       = MersenneTwister(0)) where T <: Real
 
     opts = extract_options(options)
 
     function gradwrap(g!, x)
-        stor = Array{Float64}(length(x))
+        stor = Array{Float64}(undef, length(x))
         g!(stor, x)
         bad_grads = abs.(stor) .>= 1e15
-        stor[bad_grads] = 0.0
+        stor[bad_grads] .= 0.0
         return stor, any(bad_grads)
     end
     csminwel(f, x->gradwrap(g!, x), initial_x; H0 = H0, rng = rng, opts...)
@@ -161,7 +164,7 @@ end
 function csminwel(fcn::Function,
     grad::Function,
     x0::Vector;
-    H0::Matrix           = 1e-5.*eye(length(x0)),
+    H0::Matrix           = 1e-5 .* Matrix{eltype(x0)}(I, length(x0), length(x0)),
     rng::AbstractRNG     = MersenneTwister(0),
     verbose::Symbol      = :high,
     x_tol::Real          = 1e-32,  # default from Optim.jl
@@ -258,7 +261,7 @@ function csminwel(fcn::Function,
             # perturbing search direction if problem not 1D
             if wall1 && (length(H) > 1)
 
-                Hcliff = H + diagm(diag(H).*rand(rng, nx))
+                Hcliff = H + Diagonal(diag(H)).*rand(rng, nx)
 
                 if VERBOSITY[verbose] >= VERBOSITY[:low]
                     @printf "Cliff.  Perturbing search direction.\n"
@@ -293,7 +296,7 @@ function csminwel(fcn::Function,
                                 gcliff = gcliff'
                             end
                             f3, x3, fc, retcode3 = csminit(fcn, x, f_x, gcliff,
-                            false, eye(nx); verbose=verbose)
+                            false, Matrix{eltype(nx)}(I, nx, nx); verbose=verbose)
                             f_calls += fc
 
                             if retcode3==2 || retcode3==4
@@ -364,7 +367,7 @@ function csminwel(fcn::Function,
                 retcodeh = retcode3
             end
 
-            if isdefined(:gh)
+            if @isdefined gh
                 nogh = isempty(gh)
             else
                 nogh = true
@@ -394,7 +397,7 @@ function csminwel(fcn::Function,
         end
 
         # record# retcodeh of previous x
-        copy!(x_previous, x)
+        copyto!(x_previous, x)
 
         # update before next iteration
         f_x_previous, f_x = f_x, fh
@@ -477,7 +480,7 @@ function csminwel(fcn::Function, x0::Vector{T}; kwargs...) where T <: Real
             autodiff = fn[2]
         end
     end
-    grad{T<:Number}(x::Array{T}) = csminwell_grad(fcn, x, Val{autodiff})
+    grad(x::Array{T}) where T<:Number = csminwell_grad(fcn, x, Val{autodiff})
     csminwel(fcn, grad, x0; kwargs...)
 end
 
@@ -485,14 +488,14 @@ end
 function csminwell_grad(fcn, x, ::Type{Val{false}})
     gr = Calculus.gradient(fcn, x)
     bad_grads = abs.(gr) .>= 1e15
-    gr[bad_grads] = 0.0
+    gr[bad_grads] .= 0.0
     return gr, any(bad_grads)
 end
 
 function csminwell_grad(fcn, x, ::Type{Val{true}})
     gr = ForwardDiff.gradient(fcn, x)
     bad_grads = abs.(gr) .>= 1e15
-    gr[bad_grads] = 0.0
+    gr[bad_grads] .= 0.0
     return gr, any(bad_grads)
 end
 
@@ -703,7 +706,7 @@ function bfgsi(H0, dg, dx; verbose::Symbol = :high)
         # do nothing
     else
         if VERBOSITY[verbose] >= VERBOSITY[:high]
-            warn("bfgs update failed")
+            @warn("bfgs update failed")
             @printf "|dg| = %f, |dx| = %f\n" (norm(dg)) (norm(dx))
             @printf "dg'dx = %f\n" dgdx
             @printf "|H*dg| = %f\n" (norm(Hdg))
@@ -749,7 +752,7 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{true}}, ::Type{Val{fal
         gr = similar(x)
         grad_f(gr, x)
         bad_grads = abs.(gr) .>= 1e15
-        gr[bad_grads] = 0.0
+        gr[bad_grads] .= 0.0
         return gr, any(bad_grads)
     end
 end
@@ -759,7 +762,7 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{tr
         gr = similar(x)
         ForwardDiff.gradient!(gr, fcn, x)
         bad_grads = abs.(gr) .>= 1e15
-        gr[bad_grads] = 0.0
+        gr[bad_grads] .= 0.0
         return gr, any(bad_grads)
     end
 end
@@ -768,7 +771,7 @@ function getgradient(fcn, grad_f, s::Csminwel, ::Type{Val{false}}, ::Type{Val{fa
     function gradient(x)
         gr = Calculus.gradient(fcn, x)
         bad_grads = abs.(gr) .>= 1e15
-        gr[bad_grads] = 0.0
+        gr[bad_grads] .= 0.0
         return gr, any(bad_grads)
     end
 end

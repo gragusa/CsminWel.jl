@@ -1,5 +1,4 @@
-using CsminWel
-using Base.Test
+using CsminWel, Test, Random, LinearAlgebra
 
 f(x) = sum(x.^2)
 function grad(x)
@@ -15,7 +14,7 @@ res0 = CsminWel.csminwel(f, grad, [0.1,0.1])
 res1 = CsminWel.csminwel(f, [0.1,0.1])
 
 res2 = CsminWel.csminwel(f, grad, [0.1,0.1])
-res3 = CsminWel.csminwel(f, [0.1,0.1], H = eye(2))
+res3 = CsminWel.csminwel(f, [0.1,0.1], H = Matrix{Float64}(I, 2, 2))
 
 
 res4 = optimize(f, g!, [.1, .1], Csminwel())
@@ -32,7 +31,7 @@ res6 = optimize(OnceDifferentiable(f, [.1, .1]; autodiff = :forward), [.1, .1], 
 
 #Maximizing loglikelihood logistic models
 using StatsFuns
-srand(1)
+Random.seed!(1)
 x = [ones(200) randn(200,4)]
 y = [rand() < 0.5 ? 1. : 0. for j in 1:200]
 
@@ -48,7 +47,7 @@ function dloglik(beta)
 end
 
 function g!(stor, beta)
-    copy!(stor, dloglik(beta))
+    copyto!(stor, dloglik(beta))
 end
 
 res1 = optimize(loglik, g!, zeros(5), BFGS())
